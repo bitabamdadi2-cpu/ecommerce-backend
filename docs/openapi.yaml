@@ -1,0 +1,972 @@
+openapi: 3.0.3
+info:
+  title: فروشگاه اینترنتی - API
+  description: >
+    مستندات کامل API بک‌اند فروشگاه اینترنتی (Node.js + Express + MongoDB).
+    برای احراز هویت، توکن دریافتی از مسیرهای login/register را در دکمه Authorize
+    (بالای صفحه) به‌صورت `Bearer <accessToken>` وارد کنید.
+  version: 1.0.0
+  contact:
+    name: پشتیبانی پروژه
+servers:
+  - url: http://localhost:5000/api
+    description: سرور توسعه (Local)
+  - url: https://your-deployed-domain.com/api
+    description: سرور Production (بعد از دیپلوی آدرس را جایگزین کنید)
+
+tags:
+  - name: Auth
+    description: ثبت‌نام، ورود و مدیریت توکن
+  - name: Users
+    description: مدیریت کاربران و پروفایل
+  - name: Categories
+    description: دسته‌بندی محصولات
+  - name: Products
+    description: کاتالوگ محصولات
+  - name: Cart
+    description: سبد خرید
+  - name: Orders
+    description: سفارش‌ها
+  - name: Coupons
+    description: کدهای تخفیف
+  - name: Reviews
+    description: نظرات و امتیازدهی
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    SuccessMessage:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        message: { type: string, example: "عملیات با موفقیت انجام شد" }
+
+    Error:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        message: { type: string, example: "پیام خطا" }
+
+    Address:
+      type: object
+      properties:
+        title: { type: string, example: "خانه" }
+        province: { type: string, example: "تهران" }
+        city: { type: string, example: "تهران" }
+        street: { type: string, example: "خیابان ولیعصر، پلاک ۱۰" }
+        postalCode: { type: string, example: "1234567890" }
+        receiverPhone: { type: string, example: "09120000000" }
+        isDefault: { type: boolean }
+
+    User:
+      type: object
+      properties:
+        _id: { type: string, example: "665f1c2b9c1f4a0012a3b456" }
+        name: { type: string, example: "زهرا محمدی" }
+        email: { type: string, example: "zahra@example.com" }
+        phone: { type: string, example: "09120000000" }
+        role: { type: string, enum: [customer, admin, manager] }
+        addresses:
+          type: array
+          items: { $ref: '#/components/schemas/Address' }
+        isBlocked: { type: boolean }
+        createdAt: { type: string, format: date-time }
+
+    RegisterInput:
+      type: object
+      required: [name, email, password]
+      properties:
+        name: { type: string, example: "زهرا محمدی" }
+        email: { type: string, example: "zahra@example.com" }
+        password: { type: string, format: password, example: "password123" }
+        phone: { type: string, example: "09120000000" }
+
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, example: "zahra@example.com" }
+        password: { type: string, format: password, example: "password123" }
+
+    AuthResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            id: { type: string }
+            name: { type: string }
+            email: { type: string }
+            role: { type: string }
+        accessToken: { type: string }
+        refreshToken: { type: string }
+
+    Variant:
+      type: object
+      properties:
+        _id: { type: string }
+        sku: { type: string, example: "TSHIRT-BLK-M" }
+        color: { type: string, example: "مشکی" }
+        size: { type: string, example: "M" }
+        price: { type: number, example: 350000 }
+        stock: { type: integer, example: 25 }
+
+    Product:
+      type: object
+      properties:
+        _id: { type: string }
+        name: { type: string, example: "تی‌شرت ساده" }
+        slug: { type: string, example: "تی-شرت-ساده-abc123" }
+        description: { type: string }
+        category: { type: string, description: "شناسه دسته‌بندی" }
+        brand: { type: string, example: "برند نمونه" }
+        images:
+          type: array
+          items: { type: string, example: "https://example.com/img1.jpg" }
+        basePrice: { type: number, example: 350000 }
+        variants:
+          type: array
+          items: { $ref: '#/components/schemas/Variant' }
+        ratingsAverage: { type: number, example: 4.5 }
+        ratingsCount: { type: integer, example: 12 }
+        isActive: { type: boolean }
+        totalStock: { type: integer, example: 80 }
+
+    ProductInput:
+      type: object
+      required: [name, description, category, basePrice]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        category: { type: string }
+        brand: { type: string }
+        images:
+          type: array
+          items: { type: string }
+        basePrice: { type: number }
+        variants:
+          type: array
+          items:
+            type: object
+            properties:
+              sku: { type: string }
+              color: { type: string }
+              size: { type: string }
+              price: { type: number }
+              stock: { type: integer }
+
+    Category:
+      type: object
+      properties:
+        _id: { type: string }
+        name: { type: string, example: "پوشاک" }
+        slug: { type: string, example: "پوشاک" }
+        description: { type: string }
+        image: { type: string }
+        parent: { type: string, nullable: true }
+        children:
+          type: array
+          items: { $ref: '#/components/schemas/Category' }
+
+    CartItem:
+      type: object
+      properties:
+        _id: { type: string }
+        product: { type: string }
+        variantId: { type: string }
+        quantity: { type: integer, example: 2 }
+        price: { type: number, example: 350000 }
+
+    Cart:
+      type: object
+      properties:
+        _id: { type: string }
+        user: { type: string }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CartItem' }
+        totalPrice: { type: number, example: 700000 }
+
+    OrderItem:
+      type: object
+      properties:
+        product: { type: string }
+        variantId: { type: string }
+        name: { type: string }
+        color: { type: string }
+        size: { type: string }
+        quantity: { type: integer }
+        price: { type: number }
+
+    Order:
+      type: object
+      properties:
+        _id: { type: string }
+        user: { type: string }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/OrderItem' }
+        shippingAddress: { $ref: '#/components/schemas/Address' }
+        itemsPrice: { type: number }
+        shippingPrice: { type: number }
+        taxPrice: { type: number }
+        discountAmount: { type: number }
+        totalPrice: { type: number }
+        paymentMethod: { type: string, enum: [zarinpal, idpay, cod] }
+        isPaid: { type: boolean }
+        status:
+          type: string
+          enum: [pending_payment, processing, shipped, delivered, cancelled, returned]
+        createdAt: { type: string, format: date-time }
+
+    CreateOrderInput:
+      type: object
+      required: [shippingAddress]
+      properties:
+        shippingAddress: { $ref: '#/components/schemas/Address' }
+        couponCode: { type: string, example: "SUMMER20" }
+        paymentMethod: { type: string, enum: [zarinpal, idpay, cod], example: zarinpal }
+
+    Coupon:
+      type: object
+      properties:
+        _id: { type: string }
+        code: { type: string, example: "SUMMER20" }
+        discountType: { type: string, enum: [percent, fixed] }
+        discountValue: { type: number, example: 20 }
+        minPurchase: { type: number, example: 500000 }
+        maxDiscount: { type: number, example: 200000 }
+        expiresAt: { type: string, format: date-time }
+        usageLimit: { type: integer, example: 100 }
+        usedCount: { type: integer, example: 3 }
+        isActive: { type: boolean }
+
+    Review:
+      type: object
+      properties:
+        _id: { type: string }
+        user: { type: string }
+        product: { type: string }
+        rating: { type: integer, minimum: 1, maximum: 5, example: 5 }
+        comment: { type: string, example: "کیفیت عالی بود" }
+        isVerifiedPurchase: { type: boolean }
+        sellerReply: { type: string }
+
+  responses:
+    Unauthorized:
+      description: توکن ارسال نشده یا نامعتبر است
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: اجازه دسترسی به این بخش وجود ندارد
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: مورد درخواستی یافت نشد
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ValidationError:
+      description: ورودی نامعتبر است
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+security:
+  - bearerAuth: []
+
+paths:
+  /health:
+    get:
+      tags: [Auth]
+      summary: بررسی سلامت سرور
+      security: []
+      responses:
+        '200':
+          description: سرور فعال است
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: ثبت‌نام کاربر جدید
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterInput' }
+      responses:
+        '201':
+          description: ثبت‌نام موفق
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: ورود کاربر
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginInput' }
+      responses:
+        '200':
+          description: ورود موفق
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /auth/refresh-token:
+    post:
+      tags: [Auth]
+      summary: دریافت accessToken جدید با refreshToken
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token: { type: string }
+      responses:
+        '200':
+          description: توکن جدید صادر شد
+
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: درخواست بازیابی رمز عبور
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string }
+      responses:
+        '200': { description: در صورت وجود ایمیل، لینک بازیابی ارسال شد }
+
+  /auth/reset-password/{token}:
+    post:
+      tags: [Auth]
+      summary: تنظیم رمز عبور جدید با توکن بازیابی
+      security: []
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password: { type: string }
+      responses:
+        '200': { description: رمز عبور تغییر کرد }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: دریافت اطلاعات کاربر لاگین‌شده
+      responses:
+        '200':
+          description: اطلاعات کاربر
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /categories:
+    get:
+      tags: [Categories]
+      summary: دریافت لیست درختی دسته‌بندی‌ها
+      security: []
+      responses:
+        '200':
+          description: لیست دسته‌بندی‌ها
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Category' }
+    post:
+      tags: [Categories]
+      summary: ایجاد دسته‌بندی جدید (admin/manager)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                parent: { type: string, nullable: true }
+      responses:
+        '201': { description: دسته‌بندی ایجاد شد }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /categories/{id}:
+    put:
+      tags: [Categories]
+      summary: ویرایش دسته‌بندی (admin/manager)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: به‌روزرسانی شد }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Categories]
+      summary: حذف دسته‌بندی (admin)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: حذف شد }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /products:
+    get:
+      tags: [Products]
+      summary: لیست محصولات با فیلتر، جستجو و صفحه‌بندی
+      security: []
+      parameters:
+        - in: query
+          name: search
+          schema: { type: string }
+          description: جستجوی متنی در نام/توضیحات/تگ‌ها
+        - in: query
+          name: category
+          schema: { type: string }
+        - in: query
+          name: price[gte]
+          schema: { type: number }
+        - in: query
+          name: price[lte]
+          schema: { type: number }
+        - in: query
+          name: sort
+          schema: { type: string, example: "-createdAt" }
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 20 }
+      responses:
+        '200':
+          description: لیست محصولات
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  count: { type: integer }
+                  total: { type: integer }
+                  page: { type: integer }
+                  pages: { type: integer }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Product' }
+    post:
+      tags: [Products]
+      summary: ایجاد محصول جدید (admin/manager)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProductInput' }
+      responses:
+        '201': { description: محصول ایجاد شد }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /products/{slug}:
+    get:
+      tags: [Products]
+      summary: دریافت جزئیات یک محصول با slug
+      security: []
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: جزئیات محصول
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Product' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /products/{id}:
+    put:
+      tags: [Products]
+      summary: ویرایش محصول (admin/manager)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProductInput' }
+      responses:
+        '200': { description: به‌روزرسانی شد }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Products]
+      summary: غیرفعال کردن محصول - soft delete (admin)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: محصول غیرفعال شد }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /products/{productId}/reviews:
+    get:
+      tags: [Reviews]
+      summary: دریافت نظرات یک محصول
+      security: []
+      parameters:
+        - in: path
+          name: productId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: لیست نظرات
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Review' }
+    post:
+      tags: [Reviews]
+      summary: ثبت نظر برای یک محصول (نیاز به ورود)
+      parameters:
+        - in: path
+          name: productId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rating, comment]
+              properties:
+                rating: { type: integer, minimum: 1, maximum: 5 }
+                comment: { type: string }
+      responses:
+        '201': { description: نظر ثبت شد }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /products/{productId}/reviews/{id}:
+    delete:
+      tags: [Reviews]
+      summary: حذف نظر (صاحب نظر یا admin)
+      parameters:
+        - in: path
+          name: productId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: نظر حذف شد }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /cart:
+    get:
+      tags: [Cart]
+      summary: دریافت سبد خرید کاربر لاگین‌شده
+      responses:
+        '200':
+          description: سبد خرید
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Cart' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    delete:
+      tags: [Cart]
+      summary: خالی کردن کامل سبد خرید
+      responses:
+        '200': { description: سبد خرید خالی شد }
+
+  /cart/items:
+    post:
+      tags: [Cart]
+      summary: افزودن محصول به سبد خرید
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [productId, variantId]
+              properties:
+                productId: { type: string }
+                variantId: { type: string }
+                quantity: { type: integer, default: 1 }
+      responses:
+        '201': { description: به سبد اضافه شد }
+        '400': { $ref: '#/components/responses/ValidationError' }
+
+  /cart/items/{itemId}:
+    put:
+      tags: [Cart]
+      summary: تغییر تعداد یک آیتم در سبد
+      parameters:
+        - in: path
+          name: itemId
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                quantity: { type: integer }
+      responses:
+        '200': { description: به‌روزرسانی شد }
+    delete:
+      tags: [Cart]
+      summary: حذف یک آیتم از سبد
+      parameters:
+        - in: path
+          name: itemId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: حذف شد }
+
+  /orders:
+    post:
+      tags: [Orders]
+      summary: ثبت سفارش از روی سبد خرید فعلی
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateOrderInput' }
+      responses:
+        '201':
+          description: سفارش ثبت شد
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Order' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+    get:
+      tags: [Orders]
+      summary: لیست همه سفارش‌ها (admin/manager)
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string }
+      responses:
+        '200':
+          description: لیست سفارش‌ها
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Order' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /orders/my-orders:
+    get:
+      tags: [Orders]
+      summary: تاریخچه سفارش‌های کاربر لاگین‌شده
+      responses:
+        '200':
+          description: لیست سفارش‌های کاربر
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Order' }
+
+  /orders/{id}:
+    get:
+      tags: [Orders]
+      summary: دریافت جزئیات یک سفارش
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: جزئیات سفارش
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Order' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /orders/{id}/cancel:
+    put:
+      tags: [Orders]
+      summary: لغو سفارش توسط کاربر (قبل از ارسال)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: سفارش لغو شد }
+        '400': { $ref: '#/components/responses/ValidationError' }
+
+  /orders/{id}/status:
+    put:
+      tags: [Orders]
+      summary: تغییر وضعیت سفارش (admin/manager)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [pending_payment, processing, shipped, delivered, cancelled, returned]
+      responses:
+        '200': { description: وضعیت به‌روزرسانی شد }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /coupons/apply:
+    post:
+      tags: [Coupons]
+      summary: بررسی و اعمال کد تخفیف روی سبد خرید فعلی
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, example: "SUMMER20" }
+      responses:
+        '200': { description: کد تخفیف معتبر است و مبلغ تخفیف محاسبه شد }
+        '400': { $ref: '#/components/responses/ValidationError' }
+
+  /coupons:
+    get:
+      tags: [Coupons]
+      summary: لیست کدهای تخفیف (admin/manager)
+      responses:
+        '200':
+          description: لیست کدهای تخفیف
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Coupon' }
+    post:
+      tags: [Coupons]
+      summary: ایجاد کد تخفیف جدید (admin/manager)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code: { type: string }
+                discountType: { type: string, enum: [percent, fixed] }
+                discountValue: { type: number }
+                minPurchase: { type: number }
+                maxDiscount: { type: number }
+                expiresAt: { type: string, format: date-time }
+                usageLimit: { type: integer }
+      responses:
+        '201': { description: کد تخفیف ایجاد شد }
+
+  /coupons/{id}:
+    delete:
+      tags: [Coupons]
+      summary: حذف کد تخفیف (admin)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: حذف شد }
+
+  /users:
+    get:
+      tags: [Users]
+      summary: لیست کاربران (admin)
+      responses:
+        '200':
+          description: لیست کاربران
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/User' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /users/{id}:
+    get:
+      tags: [Users]
+      summary: دریافت اطلاعات یک کاربر (admin)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: اطلاعات کاربر
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/User' }
+    put:
+      tags: [Users]
+      summary: تغییر نقش یا مسدودسازی کاربر (admin)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role: { type: string, enum: [customer, admin, manager] }
+                isBlocked: { type: boolean }
+      responses:
+        '200': { description: به‌روزرسانی شد }
+    delete:
+      tags: [Users]
+      summary: حذف کاربر (admin)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: کاربر حذف شد }
+
+  /users/me/profile:
+    put:
+      tags: [Users]
+      summary: ویرایش پروفایل خود کاربر
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                phone: { type: string }
+      responses:
+        '200':
+          description: پروفایل به‌روزرسانی شد
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/User' }
+
+  /users/me/addresses:
+    post:
+      tags: [Users]
+      summary: افزودن آدرس جدید برای کاربر
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Address' }
+      responses:
+        '201':
+          description: آدرس اضافه شد
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Address' }
